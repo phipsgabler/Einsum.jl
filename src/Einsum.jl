@@ -293,7 +293,9 @@ function extractindex!(ex::Expr, arrname, position,
         elseif off_expr isa Expr && off_expr.head == :quote
             off = off_expr.args[1]
         elseif off_expr isa QuoteNode
-            off = ex.args[3].value::Symbol
+                off = ex.args[3].value::Symbol
+        # elseif off_expr isa Expr && off_expr.head == :$
+            # off = :(esc($off_expr.args[1]))
         else
             throw(ArgumentError("Improper expression inside reference on rhs"))
         end
