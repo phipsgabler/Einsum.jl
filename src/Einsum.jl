@@ -282,27 +282,30 @@ function extractindex!(ex::Expr, arrname, position,
     
     if ex.head == :call && length(ex.args) == 3
         op = ex.args[1]
-        sym = ex.args[2]
-        offT = typeof(ex.args[3])
-        if offT <: Integer
+        
+        idx = ex.args[2]
+        @assert typeof(idx) == Symbol
+        
+        off_expr = ex.args[3]
+        
+        if off_expr isa Integer
             off = ex.args[3]::Integer
-        elseif offT <: Expr && ex.args[3].head == :quote
-            off = ex.args[3].args[1]::Symbol
-        elseif offT == QuoteNode
+        elseif off_expr isa Expr && off_expr.head == :quote
+            off = off_expr.args[1]
+        elseif off_expr isa QuoteNode
             off = ex.args[3].value::Symbol
         else
             throw(ArgumentError("Improper expression inside reference on rhs"))
         end
-        @assert typeof(sym) == Symbol
 
         # push :i to indices we're iterating over
-        push!(idx_store, sym)
+        push!(idx_store, idx)
 
         # need to invert + or - to determine iteration range
         if op == :+
-            push!(dim_store, :((size($arrname, $position) - $off)))
+            push!(dim_store, :(size($arrname, $position) - $off))
         elseif op == :-
-            push!(dim_store, :((size($arrname, $position) + $off)))
+            push!(dim_store, :(size($arrname, $position) + $off))
         else
             throw(ArgumentError("Operations inside ref on rhs are limited to `+` or `-`"))
         end
