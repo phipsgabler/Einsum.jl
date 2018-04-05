@@ -24,13 +24,13 @@ function _einsum(ex::Expr, inbound = true, simd = false)
     rhs = ex.args[2]
 
     # Get info on the left-hand side
-    lhs_idx, lhs_arr, lhs_dim = get_indices!(lhs)
+    lhs_idx, lhs_arr, lhs_dim = extractindices(lhs)
     length(lhs_arr) != 1 && throw(ArgumentError("Left-hand side of ",
         "equation contains multiple arguments. Only a single referencing ",
         " expression (e.g. @einsum A[i] = ...) should be used,"))
 
     # Get info on the right-hand side
-    rhs_idx, rhs_arr, rhs_dim = get_indices!(rhs)
+    rhs_idx, rhs_arr, rhs_dim = extractindices(rhs)
 
     # remove duplicate indices on left-hand and right-hand side
     # and ensure that the array sizes match along these dimensions
@@ -217,32 +217,40 @@ function nest_loops(ex::Expr,idx::Vector{Symbol},dim::Vector{Expr},simd=false)
 end
 
 
-function get_indices!(ex::Symbol,
-                      idx_store = Symbol[],
-                      arr_store = Symbol[ex],
-                      dim_store = Expr[])
+extractindices(ex) = extractindices!(ex, Symbol[], Symbol[], Expr[])
+
+function extractindices!(ex::Symbol,
+                         idx_store::Vector{Symbol},
+                         arr_store::Vector{Symbol},
+                         dim_store::Vector{Expr})
+    push!(arr_store, ex)
     return idx_store, arr_store, dim_store
 end
 
-@inline get_indices!(ex::Number, args...) = (args...)
+function extractindices!(ex::Number,
+                         idx_store::Vector{Symbol},
+                         arr_store::Vector{Symbol},
+                         dim_store::Vector{Expr})
+    return idx_store, arr_store, dim_store
+end
 
-function get_indices!(ex::Expr,
-                      idx_store = Symbol[],
-                      arr_store = Symbol[],
-                      dim_store = Expr[])
+function extractindices!(ex::Expr,
+                         idx_store::Vector{Symbol},
+                         arr_store::Vector{Symbol},
+                         dim_store::Vector{Expr})
     
     if ex.head == :ref # e.g. A[i,j,k]
-        tensorname = ex.args[1]
-        push!(arr_store, tensorname)
+        arrname = ex.args[1]
+        push!(arr_store, arrname)
 
         # ex.args[2:end] are indices (e.g. [i,j,k])
-        for (pos, ix) in enumerate(ex.args[2:end])
-            get_index!(ix, tensorname, pos, idx_store, arr_store, dim_store)
+        for (pos, idx) in enumerate(ex.args[2:end])
+            extractindex!(idx, arrname, pos, idx_store, arr_store, dim_store)
         end
     elseif ex.head == :call # e.g. 2*A[i,j], transpose(A[i,j]), or A[i] + B[j]
         # ex.args[2:end] are the individual tensor expressions (e.g. [A[i], B[j]])
         for arg in ex.args[2:end]
-            get_indices!(arg, idx_store, arr_store, dim_store)
+            extractindices!(arg, idx_store, arr_store, dim_store)
         end
     else
         throw(ArgumentError("Invalid expression head: `:$(ex.head)`"))
@@ -251,21 +259,22 @@ function get_indices!(ex::Expr,
     idx_store, arr_store, dim_store
 end
 
-function get_index!(ex::Symbol, tensorname, position,
-                    idx_store, arr_store, dim_store)
-    push!(idx_store, arg)
-    push!(dim_store, :(size($tensorname, $position)))
+
+function extractindex!(ex::Symbol, arrname, position,
+                       idx_store, arr_store, dim_store)
+    push!(idx_store, ex)
+    push!(dim_store, :(size($arrname, $position)))
 end
 
-function get_index!(ex::Number, tensorname, position,
-                    idx_store, arr_store, dim_store)
+function extractindex!(ex::Number, arrname, position,
+                       idx_store, arr_store, dim_store)
     # nothing
 end
 
-function get_index!(ex::Expr, tensorname, position,
-                    idx_store, arr_store, dim_store)
+function extractindex!(ex::Expr, arrname, position,
+                       idx_store, arr_store, dim_store)
     # e.g. A[i+:offset] or A[i+5]
-    #    arg is an Expr in this case
+    #    ex is an Expr in this case
     #    We restrict it to be a Symbol (e.g. :i) followed by either
     #        a number or quoted expression.
     #    As before, push :i to index list
@@ -282,7 +291,7 @@ function get_index!(ex::Expr, tensorname, position,
         elseif offT == QuoteNode
             off = ex.args[3].value::Symbol
         else
-            throw(ArgumentError("improper expression inside reference on rhs"))
+            throw(ArgumentError("Improper expression inside reference on rhs"))
         end
         @assert typeof(sym) == Symbol
 
@@ -291,18 +300,19 @@ function get_index!(ex::Expr, tensorname, position,
 
         # need to invert + or - to determine iteration range
         if op == :+
-            push!(dim_store, :((size($tensorname, $position) - $off)))
+            push!(dim_store, :((size($arrname, $position) - $off)))
         elseif op == :-
-            push!(dim_store, :((size($tensorname, $position) + $off)))
+            push!(dim_store, :((size($arrname, $position) + $off)))
         else
-            throw(ArgumentError("operations inside ref on rhs are limited to + or -"))
+            throw(ArgumentError("Operations inside ref on rhs are limited to `+` or `-`"))
         end
-    elseif  arg.head == :quote
+    elseif ex.head == :quote
         # nothing
     else
         throw(ArgumentError("Invalid index expression: `$(ex)`"))
     end
 end
+
 
 function unquote_offsets!(ex::Expr, inside_ref = false)
     inside_ref = inside_ref || ex.head == :ref
