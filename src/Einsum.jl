@@ -109,7 +109,7 @@ function _einsum(ex::Expr, inbound = true, simd = false)
         # infer type of allocated array
         #    e.g. rhs_arr = [:A, :B]
         #    then the following line produces :(promote_type(eltype(A), eltype(B)))
-        rhs_type = :(promote_type([:(eltype($arr)) for arr in rhs_arr]...))
+        rhs_type = :(promote_type($([:(eltype($arr)) for arr in rhs_arr]...)))
 
         ex_get_type = :($(esc(:(local T = $rhs_type))))
         if length(lhs_dim) > 0
@@ -290,12 +290,8 @@ function extractindex!(ex::Expr, arrname, position,
         
         if off_expr isa Integer
             off = ex.args[3]::Integer
-        elseif off_expr isa Expr && off_expr.head == :quote
+        elseif off_expr isa Expr && off_expr.head == :$
             off = off_expr.args[1]
-        elseif off_expr isa QuoteNode
-                off = ex.args[3].value::Symbol
-        # elseif off_expr isa Expr && off_expr.head == :$
-            # off = :(esc($off_expr.args[1]))
         else
             throw(ArgumentError("Improper expression inside reference on rhs"))
         end
@@ -311,7 +307,7 @@ function extractindex!(ex::Expr, arrname, position,
         else
             throw(ArgumentError("Operations inside ref on rhs are limited to `+` or `-`"))
         end
-    elseif ex.head == :quote
+    elseif ex.head == :$
         # nothing
     else
         throw(ArgumentError("Invalid index expression: `$(ex)`"))
@@ -322,10 +318,10 @@ end
 function unquote_offsets!(ex::Expr, inside_ref = false)
     inside_ref = inside_ref || ex.head == :ref
     
-    for i = 1:length(ex.args)
-        if isa(ex.args[i], Expr)
-            if ex.args[i].head == :quote && inside_ref
-                ex.args[i] = :($(ex.args[i].args[1]))
+    for i in eachindex(ex.args)
+        if ex.args[i] isa Expr
+            if ex.args[i].head == :$ && inside_ref
+                ex.args[i] = ex.args[i].args[1]
             else
                 unquote_offsets!(ex.args[i], inside_ref)
             end
@@ -334,6 +330,7 @@ function unquote_offsets!(ex::Expr, inside_ref = false)
     
     return ex
 end
+
 
 # end module
 ############
