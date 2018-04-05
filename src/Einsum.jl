@@ -181,17 +181,18 @@ function _einsum(ex::Expr, inbound = true, simd = false)
     end
 end
 
-function nest_loops(ex::Expr,idx::Vector{Symbol},dim::Vector{Expr},simd=false)
+
+function nest_loops(ex::Expr, idx::Vector{Symbol}, dim::Vector{Expr}, simd = false)
     if simd && !isempty(idx)
         # innermost index and dimension
-        i = idx[1]
-        d = dim[1]
+        i = esc(idx[1])
+        d = esc(dim[1])
 
         # Add @simd to the innermost loop.
         ex = quote
-            local $(esc(i))
-            @simd for $(esc(i)) = 1:$(esc(d))
-                $(ex)
+            local $i
+            @simd for $i = 1:$d
+                $ex
             end
         end
         start_ = 2
@@ -202,14 +203,14 @@ function nest_loops(ex::Expr,idx::Vector{Symbol},dim::Vector{Expr},simd=false)
     # Add remaining for loops
     for j = start_:length(idx)
         # index and dimension we are looping over
-        i = idx[j]
-        d = dim[j]
+        i = esc(idx[j])
+        d = esc(dim[j])
 
         # add for loop around expression
         ex = quote
-            local $(esc(i))
-            for $(esc(i)) = 1:$(esc(d))
-                $(ex)
+            local $i
+            for $i = 1:$d
+                $ex
             end
         end
     end
