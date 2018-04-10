@@ -193,13 +193,13 @@ let
   X = randn(10)
 
   # without preallocation
-  @einsum A[i] := X[i+:offset]
+  @einsum A[i] := X[i+$offset]
   @test size(A) == (5,)
   @test all(A .== X[6:end])
 
   # with preallocation
   B = zeros(10)
-  @einsum B[i] = X[i+:offset]
+  @einsum B[i] = X[i+$offset]
   @test size(B) == (10,)
   @test all(B[1:5] .== X[6:end])
 end
@@ -246,15 +246,15 @@ end
 let
   A = randn(10,2)
   j = 2
-  @einsum B[i] := A[i,:j]
+  @einsum B[i] := A[i,$j]
   @test all(B .== A[:,j])
   @einsum C[i] := A[i,1]
   @test all(C .== A[:,1])
   
   D = zeros(10,3)
-  @einsum D[i,1] = A[i,:j]
+  @einsum D[i,1] = A[i,$j]
   @test isapprox(D[:,1],A[:,j])
-  @einsum D[i,:j] = A[i,:j]
+  @einsum D[i,$j] = A[i,$j]
   @test isapprox(D[:,j],A[:,j])
 end
 

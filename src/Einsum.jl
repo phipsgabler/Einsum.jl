@@ -272,10 +272,8 @@ function extractindex!(ex::Expr, arrname, position,
         
         if off_expr isa Integer
             off = ex.args[3]::Integer
-        elseif off_expr isa Expr && Meta.isexpr(off_expr, :quote)
+        elseif Meta.isexpr(off_expr, :$)
             off = off_expr.args[1]
-        elseif off_expr isa QuoteNode
-            off = off_expr.value
         else
             throw(ArgumentError("Improper expression inside reference on rhs"))
         end
@@ -291,7 +289,7 @@ function extractindex!(ex::Expr, arrname, position,
         else
             throw(ArgumentError("Operations inside ref on rhs are limited to `+` or `-`"))
         end
-    elseif Meta.isexpr(ex, :quote)
+    elseif Meta.isexpr(ex, :$)
         # nothing
     else
         throw(ArgumentError("Invalid index expression: `$(ex)`"))
@@ -301,20 +299,26 @@ function extractindex!(ex::Expr, arrname, position,
 end
 
 
-function unquote_offsets!(ex::Expr, inside_ref = false)
-    inside_ref |= Meta.isexpr(ex, :ref)
-    
+function unquote_offsets!(ex::Expr)
     for i in eachindex(ex.args)
-        if ex.args[i] isa Expr
-            if Meta.isexpr(ex.args[i], :quote) && inside_ref
-                ex.args[i] = ex.args[i].args[1]
-            else
-                unquote_offsets!(ex.args[i], inside_ref)
-            end
+        if Meta.isexpr(ex.args[i], :$)
+            ex.args[i] = ex.args[i].args[1]
+        else
+            unquote_offsets!(ex.args[i])
         end
     end
     
     return ex
+end
+
+unquote_offsets!(ex::Union{Integer, Symbol}) = ex
+
+macro unquote_offsets(ex)
+    unquote_offsets!(ex)
+end
+
+macro squote(ex)
+    QuoteNode(ex)
 end
 
 # end module
